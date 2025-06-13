@@ -1,4 +1,3 @@
-from models.user import User
 from database.database import Database
 from controllers.game_controller import GameController
 
@@ -19,6 +18,8 @@ class UserController:
     def save_score(self, username, score):
         return self.db.save_score(username, score)
         
-    def start_game(self, username):
+    def start_game(self, username, parent_window=None):
         """Inicia el juego para el usuario especificado"""
-        self.game_controller.start_game(username)
+        self.game_controller.start_game(username, parent_window)
+        
+    # El método show_login ya no es necesario, se maneja desde main.py

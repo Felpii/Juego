@@ -69,20 +69,29 @@ class Maze:
         """Mueve al jugador en la dirección especificada"""
         x, y = self.player_pos
         nx, ny = x + dx, y + dy
+        print(f"Intentando mover de ({x}, {y}) a ({nx}, {ny})")
         
         if 0 <= nx < self.width and 0 <= ny < self.height:
             if self.grid[ny][nx] == 0 or (nx, ny) == self.true_goal:
+                print(f"Movimiento válido a ({nx}, {ny})")
                 self.player_pos = (nx, ny)
                 
                 # Si llega a la meta falsa, la eliminamos
                 if (nx, ny) == self.fake_goal:
+                    print("¡Encontraste la meta falsa!")
                     self.grid[ny][nx] = 0
                     self.fake_goal = None
                     
                 # Si llega a la meta verdadera, termina el juego
                 if (nx, ny) == self.true_goal:
+                    print("¡Encontraste la meta verdadera!")
                     self.game_over = True
                     return True
+                return True  # Movimiento exitoso pero el juego no ha terminado
+            else:
+                print(f"Movimiento inválido: hay una pared en ({nx}, {ny})")
+        else:
+            print(f"Movimiento inválido: ({nx}, {ny}) está fuera de los límites")
         
         return False
         

@@ -1,13 +1,11 @@
-from tkinter import Tk, Button, Toplevel
+from tkinter import Tk, Toplevel, Button
 from views.login import LoginView
 from controllers.user_controller import UserController
 from controllers.game_controller import GameController
-from views.game import GameView
-import tkinter.messagebox as messagebox
 
 def main():
     root = Tk()
-    root.title("Juego Laberinto POE")
+    root.title("Juego Laberinto")
     
     # Inicializar los controladores
     user_controller = UserController()
@@ -17,37 +15,40 @@ def main():
     login_view = LoginView(root, user_controller)
     login_view.pack(expand=True, fill="both")
     
+    # Guardar referencia a la vista de login
+    login_view = None
+    
     # Función para iniciar el juego
     def start_game(username):
-        # TEST: No ocultar la ventana de login temporalmente
-        # root.withdraw()  
-        game_window = Toplevel(root) # Usar Toplevel en lugar de Tk()
+        nonlocal login_view
+        
+        # Guardar referencia a la vista de login
+        login_view = LoginView(root, user_controller)
+        
+        # Ocultar la ventana de login
+        root.withdraw()  
+        
+        # Crear nueva ventana para el juego
+        game_window = Toplevel(root)
         game_window.title("Juego Laberinto")
-        game_window.geometry("800x600")
+        game_window.geometry("900x700")
         
         # Iniciar el juego, pasando game_window como el padre para la GameView
         game_controller.start_game(username, game_window)
-        game_view = game_controller.get_game_view()
-        if game_view: # Asegurarse que game_view no es None
-            game_view.pack(expand=True, fill="both")
-        else:
-            print("Error: game_view es None, no se puede empaquetar.")
         
-        # Función para volver al login
-        def back_to_login():
+        # Configurar qué pasa cuando se cierra la ventana
+        def on_closing():
+            # Destruir la ventana del juego
             game_window.destroy()
-            # TEST: No mostrar nuevamente la ventana de login ya que no se ocultó
-            # root.deiconify()  
-        
-        # Botón para volver al login
-        back_button = Button(game_window, text="Volver al Login", command=back_to_login)
-        back_button.pack()
-        
-        # No se necesita game_window.mainloop() para Toplevel
+            # Mostrar la ventana de login original
+            root.deiconify()
+            
+        game_window.protocol("WM_DELETE_WINDOW", on_closing)
     
-    # Agregar función al controlador de usuarios
+    # Configurar la función en el controlador de usuarios
     user_controller.start_game = start_game
     
+    # Iniciar el bucle principal
     root.mainloop()
 
 if __name__ == "__main__":
