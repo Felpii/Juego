@@ -1,24 +1,105 @@
-from tkinter import Frame, Canvas, Label, Button, messagebox
+from tkinter import Frame, Canvas, Label, Button, messagebox, PhotoImage, Scrollbar
 from models.maze import Maze
 from threading import Thread
 import time
+import os
+from PIL import Image, ImageTk, ImageDraw
 
 class GameView(Frame):
     def __init__(self, parent, controller):
-        print(f"[DEBUG] GameView.__init__ - parent received: {parent}")
-        if parent is None:
-            print("[DEBUG] GameView.__init__ - WARNING: Parent is None. Frame will implicitly use default root.")
         super().__init__(parent)
         self.controller = controller
         self.maze = Maze(40, 30)  # Tamaño del laberinto
-        self.cell_size = 20  # Tamaño de cada celda en píxeles
+        self.cell_size = 32  # Tamaño de cada celda en píxeles
+        
+        # Configurar el frame principal
+        self.pack(expand=True, fill="both")
+        
+        # Inicializar diccionario de imágenes
+        self.images = {}
+        self.load_images()
         self.create_widgets()
         self.bind_events()
-        # Asegurar que el canvas pueda recibir el foco
-        self.pack(expand=True, fill="both")
+        
+        # Asegurarse de que todo se muestre correctamente
+        self.update_idletasks()
         self.focus_set()
-        self.update()  # Forzar la actualización de la interfaz
         self.canvas.focus_set()
+        
+        # Actualizar la vista
+        self.update_view()
+        
+    def load_images(self):
+        """
+        Carga las imágenes del juego desde la carpeta assets/images del proyecto.
+        Las imágenes se buscan en la ruta relativa al directorio del proyecto.
+        """
+        import os
+        from pathlib import Path
+        
+        # Obtener la ruta absoluta del directorio del proyecto
+        project_dir = Path(__file__).resolve().parent.parent  # Sube dos niveles desde views/ a la raíz del proyecto
+        
+        # Construir la ruta a la carpeta de imágenes
+        assets_dir = project_dir / 'assets' / 'images'
+        
+        # Crear la carpeta si no existe
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Diccionario de imágenes con sus rutas
+        image_files = {
+            'grass': 'cesped.png',
+            'wall': 'muro.png',
+            'player': 'gorila.png',
+            'goal': 'bananna.png',
+            'fake_goal': 'bananna.png'
+        }
+        
+        # Inicializar diccionario de imágenes
+        self.images = {}
+        
+        print(f"Buscando imágenes en: {assets_dir}")
+        
+        # Cargar cada imagen
+        for img_name, filename in image_files.items():
+            img_path = assets_dir / filename
+            try:
+                if img_path.exists() and img_path.is_file():
+                    print(f"Cargando imagen: {img_path}")
+                    # Cargar imagen desde archivo
+                    img = Image.open(img_path)
+                    # Convertir a modo RGBA si es necesario
+                    if img.mode != 'RGBA':
+                        img = img.convert('RGBA')
+                    # Redimensionar si es necesario
+                    if img.size != (self.cell_size, self.cell_size):
+                        img = img.resize((self.cell_size, self.cell_size), Image.Resampling.LANCZOS)
+                    # Crear PhotoImage y mantener una referencia
+                    photo_img = ImageTk.PhotoImage(img)
+                    self.images[img_name] = photo_img
+                    print(f"Imagen cargada correctamente: {img_name} - Tamaño: {img.size}")
+                else:
+                    print(f"ADVERTENCIA: No se encontró la imagen: {img_path}")
+                    self.images[img_name] = None
+            except Exception as e:
+                print(f"ERROR cargando imagen {img_path}: {e}")
+                import traceback
+                traceback.print_exc()
+                self.images[img_name] = None
+                
+        # Verificar qué imágenes se cargaron
+        print("\nResumen de imágenes cargadas:")
+        for name, img in self.images.items():
+            status = "Cargada" if img is not None else "No disponible"
+            print(f"- {name}: {status}")
+            
+        # Si no se cargaron imágenes, mostrar sugerencia
+        if not any(self.images.values()):
+            print("\n¡No se cargaron imágenes! Asegúrate de que:")
+            print(f"1. La carpeta de imágenes existe en: {assets_dir}")
+            print("2. Los archivos de imagen tienen los nombres correctos:")
+            for name, filename in image_files.items():
+                print(f"   - {name}: {filename}")
         
     def create_widgets(self):
         # Frame principal que contendrá todo
@@ -40,29 +121,64 @@ class GameView(Frame):
                               font=('Arial', 12, 'bold'))
         self.time_label.pack(side="left")
         
-        # Frame para el canvas del juego
+        # Frame para el canvas del juego con fondo
         self.canvas_frame = Frame(self.main_frame, bd=2, relief="sunken")
         self.canvas_frame.pack(expand=True, fill="both")
         
-        # Canvas para dibujar el laberinto
-        self.canvas = Canvas(self.canvas_frame, 
-                           width=self.maze.width * self.cell_size,
-                           height=self.maze.height * self.cell_size,
-                           bg='white',
-                           highlightthickness=0)
-        self.canvas.pack(expand=True, padx=5, pady=5)
+        # Configurar el grid para que el canvas se expanda
+        self.canvas_frame.grid_rowconfigure(0, weight=1)
+        self.canvas_frame.grid_columnconfigure(0, weight=1)
         
-        # Configurar el foco para que se mantenga en el canvas
-        def set_focus(event=None):
-            self.canvas.focus_set()
+        # Canvas para mostrar el juego
+        self.canvas = Canvas(self.canvas_frame, 
+                           width=800,  # Ancho fijo inicial
+                           height=600,  # Alto fijo inicial
+                           bg='#2c3e50',
+                           highlightthickness=0)
+        
+        # Configurar scrollbars
+        self.h_scroll = Scrollbar(self.canvas_frame, orient="horizontal", command=self.canvas.xview)
+        self.v_scroll = Scrollbar(self.canvas_frame, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(xscrollcommand=self.h_scroll.set, 
+                            yscrollcommand=self.v_scroll.set)
+        
+        # Posicionar widgets con grid
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.v_scroll.grid(row=0, column=1, sticky="ns")
+        self.h_scroll.grid(row=1, column=0, sticky="we")
+        
+        # Configurar el canvas para que ocupe todo el espacio disponible
+        self.canvas.pack_propagate(False)
+        
+        # Configurar el manejo del foco
+        self.canvas.focus_set()
+        self.canvas.bind("<1>", lambda e: self.canvas.focus_set())
+        
+        # Configurar el tamaño mínimo del canvas
+        self.canvas.config(width=800, height=600)
+        
+        # Forzar la actualización de la geometría
+        self.update_idletasks()
             
         # Vincular eventos para mantener el foco en el canvas
-        self.canvas.bind("<Button-1>", set_focus)
-        self.bind("<Enter>", set_focus)
+        self.canvas.bind("<Button-1>", lambda e: self.canvas.focus_set())
+        self.canvas.bind("<Enter>", lambda e: self.canvas.focus_set())
+        self.canvas.bind("<Leave>", lambda e: self.canvas.focus_set())
         
-        # Asegurarse de que el canvas tenga el foco inicial
-        set_focus()
-        
+    def _on_mousewheel(self, event):
+        """Maneja el desplazamiento con la rueda del mouse"""
+        if event.num == 4 or event.delta > 0:
+            self.canvas.yview_scroll(-1, "units")
+        elif event.num == 5 or event.delta < 0:
+            self.canvas.yview_scroll(1, "units")
+    
+    def _on_shift_mousewheel(self, event):
+        """Maneja el desplazamiento horizontal con Shift + rueda del mouse"""
+        if event.num == 4 or event.delta > 0:
+            self.canvas.xview_scroll(-1, "units")
+        elif event.num == 5 or event.delta < 0:
+            self.canvas.xview_scroll(1, "units")
+    
     def bind_events(self):
         # Función para manejar el movimiento
         def on_key_press(event):
@@ -82,6 +198,10 @@ class GameView(Frame):
         
         # Vincular eventos de teclado al canvas
         self.canvas.bind_all("<KeyPress>", on_key_press)
+        
+        # Configurar eventos de desplazamiento
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+        self.canvas.bind("<Shift-MouseWheel>", self._on_shift_mousewheel)
         
         # Asegurarse de que el canvas tenga el foco
         self.canvas.focus_set()
@@ -107,45 +227,83 @@ class GameView(Frame):
         return False
             
     def update_view(self):
-        """Actualiza la vista del laberinto"""
+        """Actualiza la vista del laberinto con las imágenes cargadas"""
+        if not hasattr(self, 'canvas') or not self.canvas or not hasattr(self, 'images'):
+            print("No se puede actualizar la vista: canvas o imágenes no están disponibles")
+            return
+            
+        # Limpiar el canvas
         self.canvas.delete("all")
         
-        # Dibujar paredes
-        for y in range(self.maze.height):
-            for x in range(self.maze.width):
-                if self.maze.get_grid()[y][x] == 1:
-                    self.canvas.create_rectangle(
-                        x * self.cell_size, y * self.cell_size,
-                        (x + 1) * self.cell_size, (y + 1) * self.cell_size,
-                        fill='black'
-                    )
-        
-        # Dibujar metas
-        fake_goal, true_goal = self.maze.get_goals()
-        if fake_goal:
-            self.canvas.create_rectangle(
-                fake_goal[0] * self.cell_size, fake_goal[1] * self.cell_size,
-                (fake_goal[0] + 1) * self.cell_size, (fake_goal[1] + 1) * self.cell_size,
-                fill='red'
-            )
+        try:
+            # Obtener el estado actual del laberinto
+            player_x, player_y = self.maze.get_player_pos()
+            fake_goal, true_goal = self.maze.get_goals()
             
-        if true_goal:
-            self.canvas.create_rectangle(
-                true_goal[0] * self.cell_size, true_goal[1] * self.cell_size,
-                (true_goal[0] + 1) * self.cell_size, (true_goal[1] + 1) * self.cell_size,
-                fill='green'
-            )
+            # Mostrar imagen de fondo (césped) que cubra todo el canvas
+            if 'grass' in self.images and self.images['grass']:
+                # Calcular cuántas veces repetir la imagen para cubrir todo el canvas
+                canvas_width = self.canvas.winfo_width() or 800
+                canvas_height = self.canvas.winfo_height() or 600
+                img_width = self.images['grass'].width()
+                img_height = self.images['grass'].height()
+                
+                for x in range(0, canvas_width, img_width):
+                    for y in range(0, canvas_height, img_height):
+                        self.canvas.create_image(x, y, 
+                                               image=self.images['grass'], 
+                                               anchor='nw', 
+                                               tags='background')
+            
+            # Mostrar imagen del jugador
+            if 'player' in self.images and self.images['player']:
+                self.canvas.create_image(
+                    player_x * self.cell_size, 
+                    player_y * self.cell_size,
+                    image=self.images['player'], 
+                    anchor='nw', 
+                    tags='player'
+                )
+            
+            # Mostrar metas
+            if true_goal and 'goal' in self.images and self.images['goal']:
+                tx, ty = true_goal
+                self.canvas.create_image(
+                    tx * self.cell_size,
+                    ty * self.cell_size,
+                    image=self.images['goal'],
+                    anchor='nw',
+                    tags='goal'
+                )
+            
+            if fake_goal and 'fake_goal' in self.images and self.images['fake_goal']:
+                fx, fy = fake_goal
+                self.canvas.create_image(
+                    fx * self.cell_size,
+                    fy * self.cell_size,
+                    image=self.images['fake_goal'],
+                    anchor='nw',
+                    tags='fake_goal'
+                )
+            
+            # Actualizar región de desplazamiento
+            self.canvas.config(scrollregion=self.canvas.bbox("all"))
+            
+            # Forzar la actualización del canvas
+            self.canvas.update_idletasks()
+            
+        except Exception as e:
+            print(f"Error al actualizar la vista: {e}")
+            import traceback
+            traceback.print_exc()
         
-        # Dibujar jugador
-        player_x, player_y = self.maze.get_player_pos()
-        self.canvas.create_rectangle(
-            player_x * self.cell_size, player_y * self.cell_size,
-            (player_x + 1) * self.cell_size, (player_y + 1) * self.cell_size,
-            fill='blue'
-        )
+        # Actualizar tiempo si existe el label
+        if hasattr(self, 'time_label'):
+            self.time_label.config(text=f"Tiempo: {int(self.maze.get_time())}s")
         
         # Actualizar tiempo
-        self.time_label.config(text=f"Tiempo: {int(self.maze.get_time())}s")
+        if hasattr(self, 'time_label'):
+            self.time_label.config(text=f"Tiempo: {int(self.maze.get_time())}s")
         
     def start_game(self):
         """Inicia un nuevo juego"""
