@@ -239,31 +239,40 @@ class GameView(Frame):
             # Obtener el estado actual del laberinto
             player_x, player_y = self.maze.get_player_pos()
             fake_goal, true_goal = self.maze.get_goals()
+            grid = self.maze.get_grid()  # Obtener la cuadrícula del laberinto
             
-            # Mostrar imagen de fondo (césped) que cubra todo el canvas
+            # Calcular el tamaño total del laberinto en píxeles
+            maze_width = len(grid[0]) * self.cell_size
+            maze_height = len(grid) * self.cell_size
+            
+            # Ajustar el tamaño del canvas al tamaño del laberinto
+            self.canvas.config(
+                width=min(800, maze_width),  # Máximo 800px de ancho
+                height=min(600, maze_height)  # Máximo 600px de alto
+            )
+            
+            # Dibujar el fondo de césped
             if 'grass' in self.images and self.images['grass']:
-                # Calcular cuántas veces repetir la imagen para cubrir todo el canvas
-                canvas_width = self.canvas.winfo_width() or 800
-                canvas_height = self.canvas.winfo_height() or 600
-                img_width = self.images['grass'].width()
-                img_height = self.images['grass'].height()
-                
-                for x in range(0, canvas_width, img_width):
-                    for y in range(0, canvas_height, img_height):
+                grass_img = self.images['grass']
+                for y in range(0, maze_height, grass_img.height()):
+                    for x in range(0, maze_width, grass_img.width()):
                         self.canvas.create_image(x, y, 
-                                               image=self.images['grass'], 
+                                               image=grass_img, 
                                                anchor='nw', 
                                                tags='background')
             
-            # Mostrar imagen del jugador
-            if 'player' in self.images and self.images['player']:
-                self.canvas.create_image(
-                    player_x * self.cell_size, 
-                    player_y * self.cell_size,
-                    image=self.images['player'], 
-                    anchor='nw', 
-                    tags='player'
-                )
+            # Dibujar muros
+            if 'wall' in self.images and self.images['wall']:
+                for y in range(len(grid)):
+                    for x in range(len(grid[0])):
+                        if grid[y][x] == 1:  # Si es un muro
+                            self.canvas.create_image(
+                                x * self.cell_size,
+                                y * self.cell_size,
+                                image=self.images['wall'],
+                                anchor='nw',
+                                tags='wall'
+                            )
             
             # Mostrar metas
             if true_goal and 'goal' in self.images and self.images['goal']:
@@ -286,11 +295,21 @@ class GameView(Frame):
                     tags='fake_goal'
                 )
             
-            # Actualizar región de desplazamiento
-            self.canvas.config(scrollregion=self.canvas.bbox("all"))
+            # Mostrar jugador (encima de todo)
+            if 'player' in self.images and self.images['player']:
+                self.canvas.create_image(
+                    player_x * self.cell_size, 
+                    player_y * self.cell_size,
+                    image=self.images['player'], 
+                    anchor='nw', 
+                    tags='player'
+                )
             
-            # Forzar la actualización del canvas
-            self.canvas.update_idletasks()
+            # Configurar la región de desplazamiento para que coincida con el tamaño del laberinto
+            self.canvas.config(scrollregion=(0, 0, maze_width, maze_height))
+            
+            # Ajustar la vista para que el jugador esté visible
+            self._center_view(player_x, player_y)
             
         except Exception as e:
             print(f"Error al actualizar la vista: {e}")
@@ -300,11 +319,31 @@ class GameView(Frame):
         # Actualizar tiempo si existe el label
         if hasattr(self, 'time_label'):
             self.time_label.config(text=f"Tiempo: {int(self.maze.get_time())}s")
+    
+    def _center_view(self, player_x, player_y):
+        """Centra la vista en la posición del jugador"""
+        if not hasattr(self, 'canvas'):
+            return
+            
+        # Obtener el tamaño del canvas
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
         
-        # Actualizar tiempo
-        if hasattr(self, 'time_label'):
-            self.time_label.config(text=f"Tiempo: {int(self.maze.get_time())}s")
+        if canvas_width <= 1 or canvas_height <= 1:  # Si el canvas no tiene tamaño aún
+            return
+            
+        # Calcular la posición del jugador en píxeles
+        player_px = player_x * self.cell_size
+        player_py = player_y * self.cell_size
         
+        # Calcular el desplazamiento para centrar al jugador
+        x_offset = max(0, player_px - (canvas_width // 2))
+        y_offset = max(0, player_py - (canvas_height // 2))
+        
+        # Aplicar el desplazamiento
+        self.canvas.xview_moveto(x_offset / (self.maze.width * self.cell_size))
+        self.canvas.yview_moveto(y_offset / (self.maze.height * self.cell_size))
+    
     def start_game(self):
         """Inicia un nuevo juego"""
         self.maze.generate_maze()
