@@ -9,8 +9,8 @@ class GameView(Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.maze = Maze(40, 30)  # Tamaño del laberinto
-        self.cell_size = 32  # Tamaño de cada celda en píxeles
+        self.maze = Maze(41, 29)  # Tamaño del laberinto
+        self.cell_size = 21  # Tamaño de cada celda en píxeles
         
         # Configurar el frame principal
         self.pack(expand=True, fill="both")
