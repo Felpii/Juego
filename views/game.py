@@ -3,6 +3,10 @@ from models.maze import Maze
 from threading import Thread
 import time
 import os
+import sys
+import platform
+from queue import Queue, Empty
+import winsound
 from PIL import Image, ImageTk, ImageDraw
 
 class GameView(Frame):
@@ -11,6 +15,38 @@ class GameView(Frame):
         self.controller = controller
         self.maze = Maze(41, 29)  # Tamaño del laberinto
         self.cell_size = 21  # Tamaño de cada celda en píxeles
+        
+        # Inicializar sistema de sonido
+        try:
+            import winsound
+            # Probar si el sistema de sonido está disponible
+            winsound.Beep(1000, 100)  # Beep corto para probar
+        except:
+            pass  # El sistema de sonido podría no estar disponible, pero continuamos de todos modos
+        
+        # Inicializar atributos de sonido
+        self.sound_queue = Queue()
+        self.sound_thread = None
+        self.sound_running = False  # Inicialmente desactivado
+        
+        # Cargar sonidos
+        self.sounds = {}
+        self.load_sounds()
+        
+        # Iniciar sistema de sonido
+        self.sound_running = True  # Activar el sistema de sonido
+        print("[DEBUG] Sistema de sonido activado")
+        
+        # Iniciar hilo de sonido
+        self.start_sound_thread()
+        print("[DEBUG] Hilo de sonido iniciado")
+        
+        # Reproducir música de fondo si está disponible
+        if 'background' in self.sounds:
+            print("[DEBUG] Intentando reproducir música de fondo...")
+            self.queue_sound('background')
+        else:
+            print("[ADVERTENCIA] No se encontró el archivo de música de fondo")
         
         # Configurar el frame principal
         self.pack(expand=True, fill="both")
@@ -29,6 +65,218 @@ class GameView(Frame):
         # Actualizar la vista
         self.update_view()
         
+    def get_sound_path(self, filename):
+        """Obtiene la ruta completa al archivo de sonido"""
+        # Obtener la ruta absoluta del directorio del proyecto
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # Construir la ruta al archivo de sonido
+        sound_path = os.path.join(project_dir, 'assets', 'sounds', filename)
+        # Convertir a ruta absoluta normalizada
+        return os.path.normpath(sound_path)
+    
+    def load_sounds(self):
+        """Carga los sonidos del juego"""
+        sound_files = {
+            'win': 'win.wav',
+            'background': 'background.wav'
+        }
+        
+        sounds_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'sounds')
+        
+        # Verificar si el directorio de sonidos existe
+        if not os.path.exists(sounds_dir):
+            return
+            
+        # Cargar cada sonido
+        for sound_name, filename in sound_files.items():
+            sound_path = os.path.join(sounds_dir, filename)
+            
+            # Verificar si el archivo existe y no está vacío
+            try:
+                if os.path.exists(sound_path) and os.path.getsize(sound_path) > 0:
+                    self.sounds[sound_name] = sound_path
+            except:
+                continue
+    
+    def play_sound(self, sound_type):
+        """Reproduce un efecto de sonido en segundo plano"""
+        if not self.sound_running:
+            print(f"[WARN] Intento de reproducir sonido con sonido deshabilitado: {sound_type}")
+        
+            return
+            
+        if sound_type not in self.sounds:
+            print(f"[ERROR] Tipo de sonido no válido: {sound_type}")
+            return
+            
+        sound_file = self.sounds[sound_type]
+        
+        if not sound_file:
+            print(f"[ERROR] Ruta de sonido no definida para: {sound_type}")
+            return
+            
+        if not os.path.exists(sound_file):
+            print(f"[ERROR] El archivo de sonido no existe: {sound_file}")
+            return
+            
+        print(f"\n=== INTENTANDO REPRODUCIR SONIDO: {sound_type} ===")
+        print(f"Archivo: {sound_file}")
+        print(f"Tamaño: {os.path.getsize(sound_file)} bytes")
+        
+        # Primero intentar reproducir directamente en el hilo principal
+        print("\n[PRUEBA] Reproduciendo en el hilo principal...")
+        try:
+            import winsound
+            flags = winsound.SND_FILENAME
+            if sound_type == 'background':
+                flags |= winsound.SND_LOOP | winsound.SND_ASYNC
+            else:
+                flags |= winsound.SND_ASYNC
+                
+            print(f"[PRUEBA] Intentando con flags: {flags}")
+            winsound.PlaySound(sound_file, flags)
+            print("[PRUEBA] Reproducción directa exitosa")
+            return  # Si funcionó, salir
+            
+        except Exception as e:
+            print(f"[PRUEBA] Error en reproducción directa: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        # Si la reproducción directa falla, intentar en un hilo separado
+        print("\n[INTENTO 2] Probando en un hilo separado...")
+        try:
+            def play():
+                try:
+                    import winsound
+                    print(f"[HILO] Iniciando reproducción de {sound_type}")
+                    flags = winsound.SND_FILENAME
+                    if sound_type == 'background':
+                        flags |= winsound.SND_LOOP | winsound.SND_ASYNC
+                    else:
+                        flags |= winsound.SND_ASYNC
+                    
+                    print(f"[HILO] Reproduciendo con flags: {flags}")
+                    winsound.PlaySound(sound_file, flags)
+                    print("[HILO] Reproducción exitosa")
+                    
+                except Exception as e:
+                    print(f"[HILO] Error al reproducir sonido: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Iniciar el hilo de reproducción
+            sound_thread = Thread(target=play, daemon=True)
+            sound_thread.start()
+            print("[INFO] Hilo de reproducción iniciado")
+            
+        except Exception as e:
+            print(f"[ERROR] Error al iniciar hilo de sonido: {e}")
+            import traceback
+            traceback.print_exc()
+            
+        print(f"=== FIN DE INTENTO DE REPRODUCCIÓN: {sound_type} ===\n")
+    
+    def start_sound_thread(self):
+        """Inicia el hilo para manejar la reproducción de sonidos"""
+        # Asegurarse de que el sistema de sonido esté activo
+        if not hasattr(self, 'sound_running') or not self.sound_running:
+            self.sound_running = True
+        
+        # Verificar si el hilo ya está en ejecución
+        if hasattr(self, 'sound_thread') and self.sound_thread is not None:
+            if self.sound_thread.is_alive():
+                return
+        
+        # Asegurarse de que la cola existe
+        if not hasattr(self, 'sound_queue'):
+            self.sound_queue = Queue()
+        
+        def sound_worker():
+            while self.sound_running:
+                try:
+                    # Obtener el siguiente sonido de la cola (espera hasta 1 segundo)
+                    try:
+                        sound_type = self.sound_queue.get(timeout=1)
+                        self.play_sound(sound_type)
+                        self.sound_queue.task_done()
+                    except Empty:
+                        continue
+                        
+                except Exception:
+                    break
+                    import traceback
+                    traceback.print_exc()
+            
+            print("[INFO] Hilo de sonido finalizado")
+        
+        try:
+            # Iniciar el hilo
+            self.sound_thread = Thread(target=sound_worker, daemon=True)
+            self.sound_thread.start()
+            print("[INFO] Hilo de sonido iniciado correctamente")
+        except Exception as e:
+            print(f"[ERROR] No se pudo iniciar el hilo de sonido: {e}")
+            self.sound_running = False
+    
+    def queue_sound(self, sound_type):
+        """Agrega un sonido a la cola de reproducción"""
+        # Verificar si el sistema de sonido está activo
+        if not hasattr(self, 'sound_running') or not self.sound_running:
+            self.sound_running = True
+            self.start_sound_thread()
+            
+            if not hasattr(self, 'sound_running') or not self.sound_running:
+                return False
+            
+        if sound_type not in self.sounds:
+            return False
+            
+        sound_file = self.sounds[sound_type]
+        if not sound_file or not os.path.exists(sound_file):
+            return False
+            
+        try:
+            # Si es el sonido de fondo, detener cualquier sonido actual primero
+            if sound_type == 'background':
+                try:
+                    import winsound
+                    winsound.PlaySound(None, winsound.SND_PURGE)
+                except:
+                    pass
+            
+            # Agregar a la cola
+            self.sound_queue.put(sound_type, block=False)
+            return True
+            
+        except:
+            return False
+    
+    def stop_sounds(self):
+        """Detiene todos los sonidos"""
+        try:
+            # Detener cualquier sonido que se esté reproduciendo
+            winsound.PlaySound(None, winsound.SND_PURGE)
+            
+            # Limpiar la cola de sonidos
+            while not self.sound_queue.empty():
+                try:
+                    self.sound_queue.get_nowait()
+                except Empty:
+                    break
+                    
+            # Establecer la bandera para detener el hilo de sonido
+            self.sound_running = False
+            
+            # Si hay un hilo de sonido, esperar a que termine
+            if hasattr(self, 'sound_thread') and self.sound_thread:
+                self.sound_thread.join(timeout=0.1)
+                
+            print("[DEBUG] Todos los sonidos han sido detenidos")
+            
+        except Exception as e:
+            print(f"[ERROR] Error al detener los sonidos: {e}")
+    
     def load_images(self):
         """
         Carga las imágenes del juego desde la carpeta assets/images del proyecto.
@@ -210,26 +458,37 @@ class GameView(Frame):
         print("Controles: Usa las flechas o WASD para moverte")
         
     def move_player(self, dx, dy):
-        """Mueve al jugador y actualiza la vista"""
-        # Guardar la posición anterior
+        """Mueve al jugador en la dirección especificada"""
+        if self.maze.game_over:
+            return False
+            
         old_x, old_y = self.maze.get_player_pos()
-        
-        # Intentar mover al jugador
         moved = self.maze.move_player(dx, dy)
         
-        # Si el jugador se movió, actualizar la vista
         if moved:
-            # Verificar si el juego terminó
-            if self.maze.game_over:
-                self.controller.game_completed(self.maze.get_time())
-            return True
+            print(f"[INFO] Jugador movido a ({old_x + dx}, {old_y + dy})")
             
-        return False
+            # Reproducir sonido de movimiento
+            self.queue_sound('move')
+            
+            # Verificar si el jugador ganó
+            if self.maze.game_over:
+                print("[INFO] ¡Juego completado!")
+                self.queue_sound('win')
+                self.controller.game_completed(self.maze.get_time())
+            
+            # Actualizar la vista
+            self.update_view()
+            
+            # Forzar la actualización de la interfaz
+            self.update_idletasks()
+            
+        return moved
             
     def update_view(self):
         """Actualiza la vista del laberinto con las imágenes cargadas"""
-        if not hasattr(self, 'canvas') or not self.canvas or not hasattr(self, 'images'):
-            print("No se puede actualizar la vista: canvas o imágenes no están disponibles")
+        if not hasattr(self, 'canvas') or not self.canvas or not self.canvas.winfo_exists() or not hasattr(self, 'images'):
+            print("No se puede actualizar la vista: canvas no existe o imágenes no están disponibles")
             return
             
         # Limpiar el canvas
@@ -346,11 +605,29 @@ class GameView(Frame):
     
     def start_game(self):
         """Inicia un nuevo juego"""
+        # Detener cualquier sonido que esté reproduciéndose
+        self.stop_sounds()
+        
+        # Generar un nuevo laberinto
         self.maze.generate_maze()
+        
+        # Iniciar el temporizador
         self.maze.start_timer()
+        
+        # Actualizar la vista
         self.update_view()
+        
         # Iniciar la actualización periódica del tiempo
         self.update_timer()
+        
+        # Reproducir música de fondo (asegurarse de que el sonido esté en la cola)
+        print("[DEBUG] Iniciando música de fondo...")
+        self.queue_sound('background')
+        
+        # Imprimir información de depuración
+        print("[DEBUG] Sonidos disponibles:", self.sounds)
+        print("[DEBUG] Ruta de background:", self.sounds.get('background'))
+        print("[DEBUG] Archivo existe:", os.path.exists(self.sounds.get('background', '')) if self.sounds.get('background') else 'No definido')
         
     def update_timer(self):
         """Actualiza el contador de tiempo"""
@@ -369,3 +646,43 @@ class GameView(Frame):
             self.controller.back_to_login()
         except Exception as e:
             print(f"[DEBUG] Error en game_over: {e}")
+    
+    def __del__(self):
+        """Limpia los recursos al destruir la ventana"""
+        try:
+            # Detener el temporizador si existe
+            if hasattr(self, 'timer_running'):
+                self.timer_running = False
+            
+            # Detener y limpiar el sistema de sonido
+            self.sound_running = False
+            
+            # Detener cualquier sonido que se esté reproduciendo
+            try:
+                import winsound
+                winsound.PlaySound(None, winsound.SND_PURGE)
+            except:
+                pass
+            
+            # Limpiar la cola de sonidos
+            if hasattr(self, 'sound_queue'):
+                while not self.sound_queue.empty():
+                    try:
+                        self.sound_queue.get_nowait()
+                    except Empty:
+                        break
+            
+            # Esperar a que el hilo de sonido termine
+            if hasattr(self, 'sound_thread') and self.sound_thread is not None:
+                self.sound_thread.join(timeout=0.5)
+            
+            # Limpiar referencias
+            if hasattr(self, 'sounds'):
+                self.sounds.clear()
+            
+            # Limpiar el canvas
+            if hasattr(self, 'canvas') and self.canvas is not None:
+                self.canvas.delete("all")
+                
+        except:
+            pass

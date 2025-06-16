@@ -7,6 +7,7 @@ def main():
     root = Tk()
     root.title("Juego Laberinto")
     
+    
     # Inicializar los controladores
     user_controller = UserController()
     game_controller = GameController(user_controller)
