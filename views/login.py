@@ -1,34 +1,109 @@
-from tkinter import Frame, Label, Entry, Button, messagebox
-from tkinter import ttk
+import tkinter as tk
+from tkinter import ttk, messagebox
+import random
+import time
 
-class LoginView(Frame):
+class AnimatedBackground(tk.Canvas):
+    def __init__(self, parent, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.pack(fill="both", expand=True)
+        self.config(highlightthickness=0)
+        self.circles = []
+        self.colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD']
+        self.create_background()
+        self.animate()
+    
+    def create_background(self):
+        # Crear degradado de fondo
+        for i in range(0, 400, 5):
+            color = f'#{i//2:02x}{i//3:02x}80'
+            self.create_rectangle(0, i, 1000, i+5, fill=color, outline='')
+        
+        # Crear círculos decorativos
+        for _ in range(15):
+            x = random.randint(0, 800)
+            y = random.randint(0, 600)
+            size = random.randint(40, 120)
+            color = random.choice(self.colors)
+            circle = self.create_oval(x, y, x+size, y+size, fill=color, outline='', width=0)
+            self.circles.append({'id': circle, 'dx': random.uniform(-0.5, 0.5), 
+                              'dy': random.uniform(-0.5, 0.5), 'x': x, 'y': y})
+    
+    def animate(self):
+        for circle in self.circles:
+            circle['x'] += circle['dx']
+            circle['y'] += circle['dy']
+            
+            # Rebotar en los bordes
+            coords = self.coords(circle['id'])
+            if coords[0] <= 0 or coords[2] >= 800:
+                circle['dx'] *= -1
+            if coords[1] <= 0 or coords[3] >= 600:
+                circle['dy'] *= -1
+                
+            self.move(circle['id'], circle['dx'], circle['dy'])
+        
+        self.after(30, self.animate)
+
+class LoginView(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.create_widgets()
         
-    def create_widgets(self):
-        # Configurar el estilo
+        # Configurar el canvas de fondo animado
+        self.bg_canvas = AnimatedBackground(self, width=800, height=600)
+        self.bg_canvas.pack(fill="both", expand=True)
+        
+        # Frame para el formulario de login
+        self.form_frame = tk.Frame(self.bg_canvas, bg='white', bd=0, highlightthickness=0)
+        self.form_frame.place(relx=0.5, rely=0.5, anchor='center')
+        
+        # Estilo para los widgets
         style = ttk.Style()
-        style.configure("TLabel", padding=10)
-        style.configure("TEntry", padding=10)
-        style.configure("TButton", padding=10)
+        style.configure('TLabel', background='white', font=('Helvetica', 10))
+        style.configure('TEntry', font=('Helvetica', 10))
+        style.configure('TButton', font=('Helvetica', 10, 'bold'))
         
-        # Etiquetas y campos de entrada
-        Label(self, text="Usuario:").grid(row=0, column=0, padx=5, pady=5)
-        self.username_entry = Entry(self)
-        self.username_entry.grid(row=0, column=1, padx=5, pady=5)
+        # Título
+        title = tk.Label(self.form_frame, text="LAB-TROLL", 
+                        font=('Helvetica', 24, 'bold'), bg='white', fg='#2c3e50')
+        title.pack(pady=(20, 30))
         
-        Label(self, text="Contraseña:").grid(row=1, column=0, padx=5, pady=5)
-        self.password_entry = Entry(self, show="*")
-        self.password_entry.grid(row=1, column=1, padx=5, pady=5)
+        # Frame para los campos de entrada
+        input_frame = tk.Frame(self.form_frame, bg='white')
+        input_frame.pack(padx=40, pady=10)
+        
+        # Usuario
+        tk.Label(input_frame, text="Usuario:", bg='white').grid(row=0, column=0, pady=5, sticky='e')
+        self.username_entry = ttk.Entry(input_frame, width=25)
+        self.username_entry.grid(row=0, column=1, pady=5, padx=5)
+        
+        # Contraseña
+        tk.Label(input_frame, text="Contraseña:", bg='white').grid(row=1, column=0, pady=5, sticky='e')
+        self.password_entry = ttk.Entry(input_frame, show="*", width=25)
+        self.password_entry.grid(row=1, column=1, pady=5, padx=5)
+        
+        # Frame para los botones
+        button_frame = tk.Frame(self.form_frame, bg='white')
+        button_frame.pack(pady=20)
         
         # Botones
-        Button(self, text="Iniciar Sesión", command=self.login).grid(row=2, column=0, columnspan=2, pady=10)
-        Button(self, text="Registrarse", command=self.register).grid(row=3, column=0, columnspan=2, pady=10)
+        ttk.Button(button_frame, text="Iniciar Sesión", command=self.login, 
+                  style='Accent.TButton').pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Registrarse", command=self.register).pack(side='left', padx=5)
         
-        # Botón para ver puntuaciones
-        Button(self, text="Ver Puntuaciones", command=self.show_leaderboard).grid(row=4, column=0, columnspan=2, pady=10)
+        # Botón de puntuaciones
+        ttk.Button(self.form_frame, text="Ver Puntuaciones", 
+                  command=self.show_leaderboard).pack(pady=(0, 20))
+        
+        # Estilo para el botón de inicio de sesión
+        style.configure('Accent.TButton', background='#3498db', foreground='white')
+        
+        # Enfocar el campo de usuario al inicio
+        self.username_entry.focus()
+        
+        # Configurar el evento de tecla Enter
+        self.password_entry.bind('<Return>', lambda e: self.login())
         
     def login(self):
         username = self.username_entry.get()

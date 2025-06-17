@@ -1,5 +1,5 @@
 from tkinter import Tk, Toplevel, Button
-from views.login import LoginView
+from Views.login import LoginView
 from controllers.user_controller import UserController
 from controllers.game_controller import GameController
 

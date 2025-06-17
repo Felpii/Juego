@@ -637,15 +637,93 @@ class GameView(Frame):
             self.after(100, self.update_timer)
         
     def game_over(self):
-        """Maneja la finalización del juego"""
+        """Maneja la finalización del juego con una pantalla personalizada"""
         self.timer_running = False
-        # Usar try/except para evitar errores si la ventana ya fue cerrada
-        try:
-            messagebox.showinfo("¡Felicidades!", 
-                             f"¡Has completado el laberinto en {int(self.maze.get_time())} segundos!")
-            self.controller.back_to_login()
-        except Exception as e:
-            print(f"[DEBUG] Error en game_over: {e}")
+        
+        # Crear un canvas para la pantalla de game over
+        self.overlay = Canvas(self, bg='#404040', highlightthickness=0)
+        self.overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        
+        # No usamos transparencia directamente, usamos un color sólido oscuro
+        # ya que Tkinter no soporta bien la transparencia en todas las plataformas
+        
+        # Crear un frame para el contenido
+        content_frame = Frame(self.overlay, bg='white', bd=0, highlightthickness=0)
+        content_frame.place(relx=0.5, rely=0.5, anchor='center')
+        
+        # Título
+        title = Label(content_frame, text="¡FELICIDADES!", 
+                     font=('Helvetica', 24, 'bold'), 
+                     bg='white', fg='#2c3e50')
+        title.pack(pady=(20, 10), padx=40)
+        
+        # Mensaje
+        message = Label(content_frame, 
+                      text=f"Has completado el laberinto en\n{int(self.maze.get_time())} segundos!",
+                      font=('Helvetica', 14), 
+                      bg='white', fg='#34495e',
+                      justify='center')
+        message.pack(pady=(0, 20), padx=40)
+        
+        # Frame para los botones
+        button_frame = Frame(content_frame, bg='white')
+        button_frame.pack(pady=(0, 20))
+        
+        # Botón de jugar de nuevo
+        play_again_btn = Button(button_frame, text="Jugar de nuevo",
+                              font=('Helvetica', 12, 'bold'),
+                              bg='#3498db', fg='white',
+                              activebackground='#2980b9',
+                              activeforeground='white',
+                              bd=0, padx=20, pady=10,
+                              command=self._restart_game)
+        play_again_btn.pack(side='left', padx=10)
+        
+        # Botón de salir
+        exit_btn = Button(button_frame, text="Salir al menú",
+                        font=('Helvetica', 12),
+                        bg='#e74c3c', fg='white',
+                        activebackground='#c0392b',
+                        activeforeground='white',
+                        bd=0, padx=20, pady=10,
+                        command=self.controller.back_to_login)
+        exit_btn.pack(side='left', padx=10)
+        
+        # Animación de entrada
+        content_frame.place_configure(relx=0.5, rely=0.4, anchor='center')
+        
+        # Establecer el foco en el botón de jugar de nuevo de manera segura
+        def set_focus():
+            if content_frame.winfo_children():
+                play_again_btn.focus_set()
+        
+        # Programar el enfoque para después de que la interfaz se haya actualizado
+        self.after(100, set_focus)
+        
+        # Efecto de fade in
+        self.overlay.alpha = 0
+        self._fade_in()
+    
+    def _fade_in(self):
+        """Efecto de fade in para la pantalla de game over"""
+        if not hasattr(self.overlay, 'alpha'):
+            self.overlay.alpha = 0
+            
+        if self.overlay.alpha < 1.0:
+            self.overlay.alpha += 0.05
+            # Usamos una escala de grises para el fade in
+            intensity = int(64 + (191 * self.overlay.alpha))
+            color = f'#{intensity:02x}{intensity:02x}{intensity:02x}'
+            self.overlay.config(bg=color)
+            self.after(20, self._fade_in)
+    
+    def _restart_game(self):
+        """Reinicia el juego"""
+        # Destruir el overlay
+        if hasattr(self, 'overlay') and self.overlay.winfo_exists():
+            self.overlay.destroy()
+        # Reiniciar el juego
+        self.start_game()
     
     def __del__(self):
         """Limpia los recursos al destruir la ventana"""
